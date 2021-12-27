@@ -1,0 +1,159 @@
+---
+title: "Untitled"
+author: "Alessandro Dell'Orto"
+date: "12/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Environments
+
+```{r setup, message = FALSE}
+library(rlang)
+```
+
+\stepcounter{section}
+## Environment basics
+
+__[Q1]{.Q}__: List three ways in which an environment differs from a list.
+__[A]{.solved}__: Generally, an environment is similar to a named list, with four important exceptions: 
+ - Every name must be unique.
+ - The names in an environment are not ordered.
+ - An environment has a parent.
+ - Environments are not copied when modified.
+ 
+
+
+__[Q4]{.Q}__: Explain why `e[[1]]` and `e[c("a", "b")]` don't make sense when `e` is an environment.
+__[A]{.solved}__: elements of an environment are not ordered.
+
+__[Q5]{.Q}__: Create a version of `env_poke()` that will only bind new names, never re-bind old names. Some programming languages only do this, and are known as [single assignment languages](http://en.wikipedia.org/wiki/Assignment_(computer_science)#Single_assignment).
+
+__[A]{.solved}__: `rlang::env_poke()` takes a name and a value to assign a binding in an environment.
+
+```{r}
+library(rlang)
+
+e3 <- new.env()
+env_poke(e3, "a", 1)
+e3$a
+env_poke(e3, "a", 101)
+e3$a
+```
+let's rewrite env_poke
+
+```{r, error = TRUE}
+env_poke2 <- function(env, name, value) {
+  if (env_has(env, name)) {
+    stop(paste0("\"", name, "\" already exists"))
+  }
+
+  env_poke(env, name, value)
+  invisible(env)
+}
+
+# Test
+env_poke2(e3, "d", 100)
+e3$b
+env_poke2(e3, "d", 200)
+```
+
+
+
+__[Q6]{.Q}__: What does this function do? How does it differ from `<<-` and why might you prefer it?
+
+```{r, error = TRUE}
+rebind <- function(name, value, env = caller_env()) {
+  if (identical(env, empty_env())) {
+    stop("Can't find `", name, "`", call. = FALSE)
+  } else if (env_has(env, name)) {
+    env_poke(env, name, value)
+  } else {
+    rebind(name, value, env_parent(env))
+  }
+}
+
+rebind("a", 10)
+a <- 5
+rebind("a", 10)
+a
+```
+
+__[A]{.solved}__: `<<-` is the 'superassignment' operator.  It does the assignment in the
+enclosing environment. 
+`rebind()` will only carry out an assignment when it finds an existing binding and never create a new one in the global environment. This behaviour of `<<-` is usually undesirable because global variables introduce non-obvious dependencies between functions.
+
+## Recursing over environments
+
+__[Q1]{.Q}__: Modify `where()` to return _all_ environments that contain a binding for `name`. Carefully think through what type of object the function will need to return.
+
+__[A]{.solved}__: `where()` given in *Advanced R*:
+```{r}
+where <- function(name, env = caller_env()) {
+  if (identical(env, empty_env())) {
+    # Base case
+    stop("Can't find `", name, "`.", call. = FALSE)
+  } else if (env_has(env, name)) {
+    # Success case
+    env
+  } else {
+    # Recursive case
+    where(name, env_parent(env))
+  }
+}
+```
+let's rewrite
+```{r}
+where2<- function(name, env=caller_env(), path=c()) {
+  if (identical(env, empty_env())) {
+    # Base case
+    path
+  } else {
+    # Recursive case
+    if (env_has(env, name)) {
+      path <- c(path, env)
+    }
+    where2(name, env_parent(env), path)
+  }
+}
+# Test
+e1a <- env(empty_env(), a = 1, b = 2)
+e1b <- env(e1a, b = 10, c = 11)
+e1c <- env(e1b, a = 12, d = 13)
+where2("a", e1c)
+```
+
+## Special environments
+
+__[Q1]{.Q}__: How is `search_envs()` different to `env_parents(global_env())`?
+
+__[A]{.solved}__: `search_envs()` returns all the environments on the search path, `env_parents(global_env())` will list all the ancestors of the global environment
+
+```{r}
+search_envs()
+cat('---------------------------------- \n')
+env_parents(global_env())
+```
+
+
+## Call stacks
+
+__[Q1]{.Q}__: Write a function that lists all the variables defined in the environment in which it was called. It should return the same results as `ls()`.
+
+__[A]{.solved}__: 
+
+```{r}
+my_ls <- function(env = caller_env()) {
+  sort(env_names(env))
+}
+
+
+e1 <- env(a = 1, b = 2)
+
+ls(e1)
+cat('---------------------------------- \n')
+my_ls(e1)
+```
